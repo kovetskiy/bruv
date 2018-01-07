@@ -65,6 +65,8 @@ func main() {
 		log.Fatal(karma.Format(err, "unable to init cache dir"))
 	}
 
+	space := getLongest(urls)
+
 	for _, url := range urls {
 		hash := getHash(url)
 
@@ -99,7 +101,7 @@ func main() {
 			)
 		}
 
-		err = showDiff(cacheDir, hash, url, src, dst)
+		err = showDiff(cacheDir, hash, url, src, dst, space)
 		if err != nil {
 			log.Fatal(
 				karma.Format(
@@ -111,7 +113,19 @@ func main() {
 	}
 }
 
-func showDiff(dir string, remote string, url, src, dst string) error {
+func getLongest(items []string) int {
+	longest := 0
+	for _, item := range items {
+		length := len(item)
+		if length > longest {
+			longest = length
+		}
+	}
+
+	return longest
+}
+
+func showDiff(dir string, remote string, url, src, dst string, space int) error {
 	stdout, _, err := executil.Run(
 		exec.Command(
 			"git", "-C", dir,
@@ -149,7 +163,7 @@ func showDiff(dir string, remote string, url, src, dst string) error {
 	}
 
 	if behind == 0 && ahead == 0 {
-		fmt.Printf("%s\t%s is same as %s\n", url, dst, src)
+		fmt.Printf("%-"+fmt.Sprint(space)+"s  %s is same as %s\n", url, dst, src)
 	} else {
 		message := []string{}
 		if ahead > 0 {
@@ -161,7 +175,7 @@ func showDiff(dir string, remote string, url, src, dst string) error {
 		}
 
 		fmt.Printf(
-			"%s\tcompared to %s, %s is %s\n",
+			"%-"+fmt.Sprint(space)+"s  compared to %s, %s is %s\n",
 			url,
 			src,
 			dst,
