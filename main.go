@@ -181,9 +181,36 @@ func showDiff(dir string, remote string, url, src, dst string, space int) error 
 			dst,
 			strings.Join(message, " and "),
 		)
+
+		logs, err := getLogs(dir, remote, src, dst)
+		if err != nil {
+			return karma.Format(
+				err,
+				"unable to get git logs",
+			)
+		}
+
+		for _, line := range logs {
+			fmt.Println("  " + line)
+		}
 	}
 
 	return nil
+}
+
+func getLogs(dir string, remote string, src, dst string) ([]string, error) {
+	stdout, _, err := executil.Run(
+		exec.Command(
+			"git", "-C", dir,
+			"log", "--oneline", "--left-right",
+			remote+"/"+src+"..."+remote+"/"+dst,
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return strings.Split(strings.TrimSpace(string(stdout)), "\n"), nil
 }
 
 func updateRemote(dir string, remote string) error {
