@@ -26,11 +26,13 @@ var (
 Usage:
   bruv [options] <src> <dst> <url>...
   bruv [options] <src> <dst> -i
+  bruv [options] <src> <dst> -f <path>
   bruv -h | --help
   bruv --version
 
 Options:
   -i --stdin        Use stdin as list of repositories.
+  -f --file <path>  Use specified file as list of repositories.
   -c --cache <dir>  Use this directory for cache.
                      [default: $HOME/.cache/bruv/]
   -j --json         Output in JSON.
@@ -60,8 +62,18 @@ func main() {
 		useJSON  = args["--json"].(bool)
 	)
 
-	if args["--stdin"].(bool) {
-		scanner := bufio.NewScanner(os.Stdin)
+	filename, ok := args["--file"].(string)
+	if ok || args["--stdin"].(bool) {
+		var file *os.File
+		if !ok {
+			file = os.Stdin
+		} else {
+			file, err = os.Open(filename)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
 			line := scanner.Text()
 			if len(line) != 0 {
