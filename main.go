@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -32,10 +33,18 @@ Options:
   -i --stdin        Use stdin as list of repositories.
   -c --cache <dir>  Use this directory for cache.
                      [default: $HOME/.cache/bruv/]
+  -j --json         Output in JSON.
   -h --help         Show this screen.
   --version         Show version.
 `
 )
+
+type status struct {
+	URL     string   `json:"url"`
+	Equal   bool     `json:"equal"`
+	Status  string   `json:"status"`
+	Commits []string `json:"commits"`
+}
 
 func main() {
 	args, err := docopt.Parse(os.ExpandEnv(usage), nil, true, version, false)
@@ -48,6 +57,7 @@ func main() {
 		src      = args["<src>"].(string)
 		dst      = args["<dst>"].(string)
 		cacheDir = args["--cache"].(string)
+		useJSON  = args["--json"].(bool)
 	)
 
 	if args["--stdin"].(bool) {
@@ -65,6 +75,7 @@ func main() {
 		log.Fatal(karma.Format(err, "unable to init cache dir"))
 	}
 
+	statuses := []status{}
 	space := getLongest(urls)
 
 	for _, url := range urls {
@@ -101,7 +112,7 @@ func main() {
 			)
 		}
 
-		err = showDiff(cacheDir, hash, url, src, dst, space)
+		result, err := getStatus(cacheDir, hash, url, src, dst)
 		if err != nil {
 			log.Fatal(
 				karma.Format(
@@ -110,6 +121,30 @@ func main() {
 				),
 			)
 		}
+
+		if useJSON {
+			statuses = append(statuses, result)
+		} else {
+			fmt.Printf(
+				"%-"+fmt.Sprint(space)+"s %s\n",
+				result.URL,
+				result.Status,
+			)
+			if !result.Equal {
+				for _, commit := range result.Commits {
+					fmt.Println(" ", commit)
+				}
+			}
+		}
+	}
+
+	if useJSON {
+		contents, err := json.MarshalIndent(statuses, "", "  ")
+		if err != nil {
+			log.Fatal(karma.Format(err, "unable to marshal to JSON"))
+		}
+
+		fmt.Println(string(contents))
 	}
 }
 
@@ -125,7 +160,11 @@ func getLongest(items []string) int {
 	return longest
 }
 
-func showDiff(dir string, remote string, url, src, dst string, space int) error {
+func getStatus(
+	dir string,
+	remote string,
+	url, src, dst string,
+) (status, error) {
 	stdout, _, err := executil.Run(
 		exec.Command(
 			"git", "-C", dir,
@@ -134,19 +173,19 @@ func showDiff(dir string, remote string, url, src, dst string, space int) error 
 		),
 	)
 	if err != nil {
-		return err
+		return status{}, err
 	}
 
 	parts := strings.Split(strings.TrimSpace(string(stdout)), "\t")
 	if len(parts) != 2 {
-		return errors.New(
+		return status{}, errors.New(
 			"unexpected output of git rev-list, expected 2 parts around \\t",
 		)
 	}
 
 	behind, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return karma.Format(
+		return status{}, karma.Format(
 			err,
 			"unable to examine output of rev-list: %s",
 			parts[0],
@@ -155,15 +194,19 @@ func showDiff(dir string, remote string, url, src, dst string, space int) error 
 
 	ahead, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return karma.Format(
+		return status{}, karma.Format(
 			err,
 			"unable to examine output of rev-list: %s",
 			parts[1],
 		)
 	}
 
+	var result status
+	result.URL = url
+
 	if behind == 0 && ahead == 0 {
-		fmt.Printf("%-"+fmt.Sprint(space)+"s  %s is same as %s\n", url, dst, src)
+		result.Status = fmt.Sprintf("%s is same as %s", dst, src)
+		result.Equal = true
 	} else {
 		message := []string{}
 		if ahead > 0 {
@@ -174,28 +217,25 @@ func showDiff(dir string, remote string, url, src, dst string, space int) error 
 			message = append(message, fmt.Sprintf("%d commits behind", behind))
 		}
 
-		fmt.Printf(
-			"%-"+fmt.Sprint(space)+"s  compared to %s, %s is %s\n",
-			url,
+		result.Status = fmt.Sprintf(
+			"compared to %s, %s is %s",
 			src,
 			dst,
 			strings.Join(message, " and "),
 		)
 
-		logs, err := getLogs(dir, remote, src, dst)
+		commits, err := getLogs(dir, remote, src, dst)
 		if err != nil {
-			return karma.Format(
+			return status{}, karma.Format(
 				err,
 				"unable to get git logs",
 			)
 		}
 
-		for _, line := range logs {
-			fmt.Println("  " + line)
-		}
+		result.Commits = commits
 	}
 
-	return nil
+	return result, nil
 }
 
 func getLogs(dir string, remote string, src, dst string) ([]string, error) {
