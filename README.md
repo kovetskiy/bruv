@@ -13,10 +13,20 @@ git@github.com:kovetskiy/wilt   compared to master, dev is 6 commits ahead and 3
 ## Usage
 
 ```
+Usage:
   bruv [options] <src> <dst> <url>...
   bruv [options] <src> <dst> -i
+  bruv [options] <src> <dst> -f <path>
   bruv -h | --help
   bruv --version
+Options:
+  -i --stdin        Use stdin as list of repositories.
+  -f --file <path>  Use specified file as list of repositories.
+  -c --cache <dir>  Use this directory for cache.
+                     [default: $HOME/.cache/bruv/]
+  -j --json         Output in JSON.
+  -h --help         Show this screen.
+  --version         Show version.
 ```
 
 - `<src>` means branch that will be used as source of comparison.
